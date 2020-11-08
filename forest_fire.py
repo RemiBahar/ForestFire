@@ -4,18 +4,71 @@ import numpy as np
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from matplotlib import animation
+import tkinter as tk #for user forms
+
+
+#Arrays of form labels and predefined values
+fields = 'Mode (animation or analysis)', 'Iterations to run', 'Initial p_tree', 'p', 'f', 'tree rows', 'tree columns', 'interval'
+predefined_values = np.array(["animation",50,1,0.1,0.01,50,50,500])
+
+#Executed when user clicks run button
+def fetch(entries):
+    global window, user_input_array #Extends functions scope
+    
+    user_input_array = np.array([])
+    
+    #Saves input data to an array
+    for entry in entries:
+        text  = entry[1].get()
+        user_input_array = np.append(user_input_array, text)
+        
+    window.destroy() #Exits form and runs main python file
+
+#Populates form
+def makeform(window, fields):
+    entries = []
+    i=0
+    #Loops through form
+    for field in fields:
+        row = tk.Frame(window) 
+        label = tk.Label(row, width=30, text=field, anchor='w') #Adds form label
+        entry = tk.Entry(row) #Adds form input
+        entry.insert(0, predefined_values[i]) #Adds pre-filled text
+        
+        #Form layout
+        row.pack(side=tk.TOP, fill=tk.X, padx=5, pady=5) 
+        label.pack(side=tk.LEFT)
+        entry.pack(side=tk.RIGHT, expand=tk.YES, fill=tk.X)
+        entries.append((field, entry))#
+        
+        i=i+1
+        
+    return entries
+
+if __name__ == '__main__':
+    window = tk.Tk() #creates window
+    ents = makeform(window, fields) #makes form
+    window.bind('<Return>', (lambda event, e=ents: fetch(e))) #closes window
+    b1 = tk.Button(window, text='Run',
+                  command=(lambda e=ents: fetch(e))) #run button
+    b1.pack(side=tk.LEFT, padx=5, pady=5)
+    b2 = tk.Button(window, text='Cancel', command=window.quit) #cancel button
+    b2.pack(side=tk.LEFT, padx=5, pady=5)
+    window.mainloop() #goes to main python file
+    
+print(user_input_array)
 
 #User-defined variables
-mode="animation" #animation or analysis
-run_iteration = 20 #Number of times to run simulation. 15s for 100 iterations. Need 3000 for cluster analysis
+mode= user_input_array[0] #animation or analysis
+run_iteration = int(user_input_array[1]) #Number of times to run simulation. 15s for 100 iterations. Need 3000 for cluster analysis
 
-initial_p_tree = 1 #Probability of each site having a tree initially
-p = 0.1 #Probability of a tree being grown in an empty site
-f = 0.01 #Probability of a tree burning even if there are no nearby burning trees
+initial_p_tree = float(user_input_array[2]) #Probability of each site having a tree initially
+p = float(user_input_array[3]) #Probability of a tree being grown in an empty site
+f = float(user_input_array[4]) #Probability of a tree burning even if there are no nearby burning trees
 #Forest dimensions
-x = 50
-y = 50
-interval = 500 #Interval between animation frames
+x = int(user_input_array[5])
+y = int(user_input_array[6])
+interval = float(user_input_array[7]) #Interval between animation frames
 
 #Other variables
 iteration = 0
