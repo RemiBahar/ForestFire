@@ -6,11 +6,13 @@ import matplotlib.pyplot as plt
 from matplotlib import animation
 import tkinter as tk #for user forms
 
-
 #Arrays of form labels and predefined values
 fields = 'Mode (animation or analysis)', 'Iterations to run', 'Initial p_tree', 'p', 'f', 'tree rows', 'tree columns', 'interval'
-predefined_values = np.array(["animation",50,1,0.1,0.01,50,50,500])
+#Array of pre-defined values for running program
 #predefined_values = np.array(["animation",100,1,0.1,0.01,10,10,2000])
+predefined_values = np.array(["analysis",3000,1,0.1,0.001,200,200,2000])
+
+#Functions
 
 #Executed when user clicks run button
 def fetch(entries):
@@ -45,43 +47,73 @@ def makeform(window, fields):
         i=i+1
         
     return entries
-        
-def get_cluster_members(A, key, sidelength):
-    row=np.array([])    
-    col = np.array([])
+
+def hk(site_matrix, site_matrix_rows, site_matrix_columns):
+    """
+    Labels the sites in an array using the Hoshen-Kopelman algorithm.
     
-    for i in range(0, sidelength):
-        for j in range(0, sidelength):
-            if A[i,j] == key:
-                row = np.append(row, i)
-                j = np.append(col, j)
+    When merging two clusters, the equivalence class of the left cluster is changed 
+    to that of the above cluster, e.g. 2->4. A raster scan is then done of the grid, and the equivalence
+    class is used to assign the correct label, e.g. for a site with a label of 2, A[2-1] = 4 so a 4 is assigned 
+    to the site.
+    
+    Parameters:
+    site_matrix (2D Array) - Array of sites
+    site_matrix_rows (int) - Number of rows of sites
+    site_matrix_columns (int) - Number of columns of sites
+    
+    Returns:
+    hk_result_array - Array of results
+        Index 0 - cluster_matrix (2D Array) - Array of site labels 
+        Index 1 - equivalence_array (1D Array) - Array of equivalence classes
+    """
+    
+   
+    equivalence_array = np.array([])  #For equivalence classes
+    largest_equivalence_class = 0 #Largest equivalence class
+    cluster_matrix = np.zeros((site_matrix_rows,site_matrix_columns)) #Initialize cluster array filled with zeros initially
+    
+    #Raster scan grid
+    for i in range(site_matrix_rows): #loop through rows
+        for j in range(site_matrix_columns): #loop through columns
+            if site_matrix[i][j] == 1: #only label occupied sites
                 
-    return [[row], [col]]
-  
-def union(A, x, y, sidelength):
-    #Get smaller label
-    left = A[x][y-1]
-    above = A[x-1][y]
-    
-    #Set members of larger cluster to smaller cluster 
-    row_counter = -1
-    col_counter = 0
-    
-    for row in A:
-        
-        row_counter = row_counter + 1
-        col_counter = 0
-        
-        for site in row:
-            
-            if site == left:
-                A[row_counter][col_counter] = above
+                #Get left and above sites
+                left = 0 if j == 0 else site_matrix[i][j-1] 
+                above = 0 if i == 0 else site_matrix[i-1][j]
                 
-            col_counter = col_counter + 1
-        
-    return A
+                #If there are no occupied sites above or on the left, create a new equivalence class
+                if left != 1 and above != 1: 
+                    largest_equivalence_class = largest_equivalence_class + 1
+                    cluster_matrix[i][j] = largest_equivalence_class
+                    equivalence_array = np.append(equivalence_array, largest_equivalence_class)
+                #If there is an occupied site on the left only, use left site's equivalence class    
+                elif left == 1 and above != 1: #Occupied site on the left
+                    cluster_matrix[i][j] = cluster_matrix[i][j-1]
+                #If there is an occupied site above only, use the above site's equivalence class
+                elif left != 1 and above == 1: 
+                    cluster_matrix[i][j] = cluster_matrix[i-1][j]
+                #If there are occupied sites above and on the left, merge these two equivalence classes    
+                else:
+                    left_root_node_index = int(cluster_matrix[i][j-1]-1) 
+                    right_root_node_index = int(cluster_matrix[i-1][j]-1)
+                    equivalence_array[left_root_node_index] = equivalence_array[right_root_node_index]
+                    cluster_matrix[i][j] = cluster_matrix[i][j-1]
+    
+    #Raster scan grid and assign correct labels to sites                
+    for i in range(site_matrix_rows):
+        for j in range(site_matrix_columns):
+            if cluster_matrix[i][j] != 0:
+                #Use the equivalence class to label the site
+                cluster_matrix[i][j] = equivalence_array[int(cluster_matrix[i][j]-1)]
+     
+    hk_result_array = [cluster_matrix, equivalence_array]       
+    
+    return hk_result_array
+
 
 if __name__ == '__main__':
+    #Generate pop-up window
     window = tk.Tk() #creates window
     ents = makeform(window, fields) #makes form
     window.bind('<Return>', (lambda event, e=ents: fetch(e))) #closes window
@@ -95,7 +127,6 @@ if __name__ == '__main__':
 #User-defined variables
 mode= user_input_array[0] #animation or analysis
 run_iteration = int(user_input_array[1]) #Number of times to run simulation. 15s for 100 iterations. Need 3000 for cluster analysis
-
 initial_p_tree = float(user_input_array[2]) #Probability of each site having a tree initially
 p = float(user_input_array[3]) #Probability of a tree being grown in an empty site
 f = float(user_input_array[4]) #Probability of a tree burning even if there are no nearby burning trees
@@ -109,7 +140,6 @@ iteration = 0
 empty, tree, burning = 0,1,2 #State of a site
 tree_array = np.random.choice([0,1], size=(x,y), p=[1-initial_p_tree, initial_p_tree]) #Generates initial forest
 cluster_frequency_array = np.zeros(int((x*y)+1))
-
 burning_tree_array, normal_tree_array, empty_tree_array = np.array([]), np.array([]), np.array([])
 cluster_array = np.zeros((x,y))
 
@@ -127,10 +157,10 @@ def update_tree_array(tree_array):
     largest_label = 0 #For cluster labelling
     
     #For cluster label testing
-    
+    """
     for t in ax.texts:
         t.set_visible(False)
-    
+    """
     
     #Loop through rows and update sites
     for row in tree_array_old:
@@ -163,73 +193,24 @@ def update_tree_array(tree_array):
                 #Burning tree become empty site
                 tree_array[row_counter][col_counter] = empty
             
-            #Cluster code
-            
-            if site == tree:
-                if  row_counter == 0:
-                    above = empty 
-                else:
-                    above = int(tree_array_old[row_counter-1][col_counter])
-                    
-                if col_counter == 0:
-                    left = empty
-                else:
-                    left = int(tree_array_old[row_counter][col_counter-1])
-                    
-                #If no tree above or to the left of current site then assign a new cluster label
-                if left != tree and above != tree:
-                    largest_label = largest_label + 1
-                    cluster_array[row_counter][col_counter] = largest_label 
-                #One neighbour to the left 
-                elif left == tree and above != tree:
-                    cluster_array[row_counter][col_counter] = cluster_array[row_counter][col_counter-1]
-                #One neighbour above
-                elif left != tree and above == tree:
-                    cluster_array[row_counter][col_counter] = cluster_array[row_counter-1][col_counter] #old?
-                else:
-                    #Merge left and above clusters based on lowest value
-                    cluster_array = union(cluster_array, row_counter, col_counter, x)
-                    #Arbitarily set site label equal to left neighbour
-                    cluster_array[row_counter][col_counter] = cluster_array[row_counter][col_counter-1]
-                    """
-                    #Arbitarily sets site label equal to left neighbour
-                    left_label = cluster_array[row_counter][col_counter-1]
-                    above_label = cluster_array[row_counter-1][col_counter]
-                    if left_label < above_label:
-                        cluster_array[row_counter-1][col_counter] = cluster_array[row_counter][col_counter-1]
-                    else:
-                        cluster_array[row_counter][col_counter-1] = cluster_array[row_counter-1][col_counter]
-                        
-                    cluster_array[row_counter][col_counter] = cluster_array[row_counter][col_counter-1]
-                    """
-            else:
-                cluster_array[row_counter][col_counter] = 0 #Ensures burning and empty sites have no label
-            
-            
-            
-            
-            
             col_counter = col_counter + 1
     
     #After updating sites 
     burning_tree_array = np.append(burning_tree_array, np.count_nonzero(tree_array==burning))
     normal_tree_array = np.append(normal_tree_array, np.count_nonzero(tree_array==tree))
     empty_tree_array = np.append(empty_tree_array, np.count_nonzero(tree_array==empty))
-    """
-    left_column = tree_array_old[:,0]
-    i=0
-    for site in left_column:
-        row = tree_array_old[i,:]
-        max_index = np.where(row != tree)[0] 
-        print(max_index)
-                
-        i=i+1
-    
-    print("hello")
-    """
+   
     row_counter = -1 #y position of site
     col_counter = 0 #x position of site
     
+    largest_label = 0
+    id_array = np.arange((x*y))
+    label_array = id_array
+    
+    hk_result_array = hk(tree_array_old, x, y)
+    cluster_array = hk_result_array[0]
+    label_array = hk_result_array[1]
+    """
     for row in cluster_array:
         row_counter = row_counter + 1
         col_counter = 0
@@ -238,20 +219,13 @@ def update_tree_array(tree_array):
             #For testing cluster labelling
             text = ax.text(x=col_counter, y=row_counter,s= cluster_array[row_counter][col_counter],ha="center", va="center", color="w")  
             col_counter = col_counter + 1
-
-    #Gets number of trees for each cluster label
-    i=0
-    cluster_label_frequency_array = np.array([])
-    while i <= largest_label:
-        i=i+1
-        tree_count = np.count_nonzero(cluster_array==i)
-        cluster_label_frequency_array = np.append(cluster_label_frequency_array,tree_count)
-    
-    #Adds frequency of each cluster size to array
-    for e in cluster_label_frequency_array:
-        e = int(e)
-        cluster_frequency_array[e] = cluster_frequency_array[e]+1
-    
+    """
+    #Count size of each cluster and increment counters for each cluster size
+    unique_label_array = list(set(label_array))
+    for label in unique_label_array:
+        cluster_size = np.count_nonzero(cluster_array==label)
+        cluster_frequency_array[cluster_size] = cluster_frequency_array[cluster_size] + 1
+ 
     return tree_array
 
 def animate(i):
