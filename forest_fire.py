@@ -4,13 +4,117 @@ Created on Thu Nov 12 17:43:20 2020
 
 @author: remib
 """
-#Import modules 
-import numpy as np
+#Import modules
+print("Please fill in the form to run the simulation. You will need to have matplotlib and numpy installed.")
+
+#Ensures animation is compatible with different systems
+try: #Ensures script is compatible with iPython
+    from IPython import get_ipython 
+    ipython = get_ipython()
+    ipython.magic("%matplotlib qt ")                
+except ImportError:
+    pass
+
+#For matplotlib
 import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from matplotlib import animation
+
+import numpy as np
+from random import choices #for generating probabilities 
 import tkinter as tk #for user forms
-from random import choices
+from sklearn.linear_model import LinearRegression #for straight line fit
+from sklearn.metrics import mean_squared_error
+
+#Executed at the end of the program to output results
+def output_results(folder="Data"):
+    global rows, columns
+    #Get cluster data
+    f = open(folder+"/cluster_array.txt", "r")
+    cluster_array = np.loadtxt(f)
+    cluster_frequency_array = np.array([])
+    
+    #Only plot clusters with frequency over 10
+    for i in range(np.size(cluster_array)):
+      cluster_frequency_array = np.append(cluster_frequency_array, cluster_array[i])
+      if i > 2 and cluster_array[i] < 10:
+          break
+    cluster_frequency_array = np.delete(cluster_frequency_array, 0) 
+    
+    #Plot histogram of cluster sizes
+    xsize = np.size(cluster_frequency_array)
+    bins_array = np.linspace(start=1, stop=xsize, num=xsize)
+    plt.figure()
+    plt.title("Cluster Size Frequency")
+    plt.hist(cluster_frequency_array, bins=bins_array)
+    #plt.xlim((0, 80)) 
+    plt.xlabel("Cluster Size")
+    plt.ylabel("Frequency")
+    plt.minorticks_on()
+    plt.grid(which="both")
+    #plt.savefig("Cluster-50.png", dpi=1200, format="png")
+    plt.show() 
+    
+    #Produce log-log plot of cluster sizes
+    
+    #Perform linear regression on data
+    x=np.log10(bins_array)
+    X=x[0:40].reshape((-1,1))
+    y=np.log10(cluster_frequency_array)
+    model = LinearRegression().fit(X, y[0:40])
+    y_pred = model.predict(x.reshape((-1,1)))
+    
+    
+    
+    #Label plot with fit parameters
+    slope = model.coef_
+    r_sq = model.score(X, y[0:40])
+    mse = mean_squared_error(y, y_pred)
+    print("MSE: ", mse)
+    print("R^2: ", r_sq)
+    print("m: ", slope[0])
+    
+    
+    #Plot graph
+    plt.figure()  
+    plt.title("Log-Log plot of cluster size and frequency")
+    plt.xlabel("Log10(Cluster Size)")
+    plt.ylabel("Log10(Cluster Frequency)")
+    plt.plot(x, y, marker="x", linestyle="None", label="Data")
+    plt.plot(x, y_pred, linestyle="--", label="Fit")
+    plt.legend()
+    plt.minorticks_on()
+    plt.grid(which="both")
+    #plt.savefig("Log-Cluster-50.png", dpi=1200, format="png")
+    plt.show()
+    
+    #Get site evolution data
+    f = open(folder+"/burning_array.txt", "r")
+    burning_array = np.loadtxt(f)   
+    f = open(folder+"/tree_array.txt", "r")
+    tree_array = np.loadtxt(f)    
+    f = open(folder+"/empty_array.txt", "r")
+    empty_array = np.loadtxt(f)   
+    
+    mean_trees = np.mean(tree_array)
+    tree_density = mean_trees/(rows*columns)
+    print("mean_trees: ", mean_trees)
+    print("tree_density: ", tree_density)
+    
+    
+    #Plot graph of site evolution
+    plt.figure()
+    plt.title("Evolution of Forest")
+    plt.plot(burning_array, label="Burning", color="orange")
+    plt.plot(tree_array, label="Trees", color="green")
+    plt.plot(empty_array, label="Empty", color="black")
+    plt.xlabel("Time")
+    plt.ylabel("Number")
+    plt.legend()
+    plt.minorticks_on()
+    plt.grid(which="both")
+    #plt.savefig("Forest-50.png", dpi=1200, format="png")
+    plt.show()
 
 #Executed when user clicks run button
 def fetch(entries):
@@ -48,8 +152,10 @@ def makeform(window, fields):
         
 #Generate user pop-up window
 fields = 'Mode (animation or analysis)', 'Iterations to run', 'Initial p_tree', 'p', 'f', 'tree rows', 'tree columns', 'interval'
-predefined_values = np.array(["analysis",3000,1,0.1,0.001,50,50,2000])
+#predefined_values = np.array(["analysis",3000,1,0.1,0.001,50,50,2000])
 #predefined_values = np.array(["animation",100,1,0.1,0.001,10,10,2000])
+#predefined_values = np.array(["animation",3000,1,0.1,0.001,10,10,500])
+predefined_values = np.array(["analysis",3000,0,0.1,0.001,50,50,9000])
 
 if __name__ == '__main__':
     #Generate pop-up window
@@ -63,20 +169,69 @@ if __name__ == '__main__':
     b2.pack(side=tk.LEFT, padx=5, pady=5)
     window.mainloop() #goes to main python file
     
-#User-defined variables
-mode= user_input_array[0] #animation or analysis
-run_iteration = int(user_input_array[1]) #Number of times to run simulation. 15s for 100 iterations. Need 3000 for cluster analysis
-p_initial = float(user_input_array[2]) #Probability of each site having a tree initially
-p = float(user_input_array[3]) #Probability of a tree being grown in an empty site
-f = float(user_input_array[4]) #Probability of a tree burning even if there are no nearby burning trees
-rows = int(user_input_array[5])
-columns = int(user_input_array[6])
-interval = float(user_input_array[7]) #Interval between animation frames
+#Sanitise user-defined variables
 
+#Chooses parameters based on user-input
+#Defaults to pre-defined values if user-input is invalid
+    
+if user_input_array[0] == "animation" or user_input_array[0] == "analysis":
+    mode = user_input_array[0]
+else:
+    mode = predefined_values[0]
+
+#Number of times to run simulation
+try:
+    run_iteration = int(user_input_array[1]) 
+except:
+    run_iteration = int(predefined_values[1])
+    
+
+#Initial probability of a site having a tree
+try:
+    p_initial = float(user_input_array[2])
+except:
+    p_initial = float(predefined_values[2])
+    
+#Probability of a tree being grown in an empty site
+try:
+    p = float(user_input_array[3])
+except:
+    p = float(predefined_values[3])
+    
+#Probability of a tree burning even if there are no nearby burning trees
+try:
+    f = float(user_input_array[4])
+except:
+    f = float(predefined_values[4])
+
+#Forest dimensions   
+try:    
+    rows = int(user_input_array[5])
+except:
+    rows = int(predefined_values[5])
+
+try:    
+    columns = int(user_input_array[6])
+except:
+    columns = int(predefined_values[6])
+
+#Interval between animation frames
+try:    
+    interval = float(user_input_array[7])
+except:
+    interval = float(predefined_values[7])
+
+print("Running Simulation with the following parameters:")
+print("mode: ", mode)
+print("p_initial: ", p_initial)
+print("p: ", p)
+print("f: ", f)
+print("Forest Size: ", rows, "x", columns)
+print("Interval: ", interval)
+
+#Define other variables
 iteration = 0
-#Randomly generates initial forest
 total_iterations = (rows*columns*run_iteration)+1
-tree_array = np.random.choice([0,1], size=(rows,columns), p=[1-p_initial, p_initial]) 
 empty_p_array = choices([0,1], [1-p, p], k=total_iterations)
 tree_f_array =  choices([1,2], [1-f, f], k=total_iterations)
 site_counter = 0
@@ -84,6 +239,9 @@ cluster_frequency_array = np.zeros(int(rows*columns)+1)
 burning_array = np.array([])
 normal_tree_array = np.array([])
 empty_array = np.array([])
+
+#Initialize forest
+tree_array = np.random.choice([0,1], size=(rows,columns), p=[1-p_initial, p_initial]) 
 
 def hk(site_matrix, site_matrix_rows, site_matrix_columns):
     """
@@ -132,11 +290,14 @@ def hk(site_matrix, site_matrix_rows, site_matrix_columns):
                     cluster_matrix[i][j] = cluster_matrix[i-1][j]
                 #If there are occupied sites above and on the left, merge these two equivalence classes    
                 else:
-                    cluster_matrix[i][j] = cluster_matrix[i-1][j]
+                    cluster_matrix[i][j] = cluster_matrix[i-1][j] #set site equal to above label
+                    
+                    #If above and left labels not equal
                     if cluster_matrix[i-1][j] != cluster_matrix[i][j-1]:
                         left_root_node = equivalence_array[int(cluster_matrix[i][j-1]-1)]
                         above_root_node = equivalence_array[int(cluster_matrix[i-1][j]-1)]
                        
+                        #Change labels corresponding to left label to be equal to above label
                         c=-1
                         for e in equivalence_array:
                             c=c+1
@@ -147,7 +308,7 @@ def hk(site_matrix, site_matrix_rows, site_matrix_columns):
     #Raster scan grid and assign correct labels to sites                
     for i in range(site_matrix_rows):
         for j in range(site_matrix_columns):
-            if cluster_matrix[i][j] != 0:
+            if cluster_matrix[i][j] != 0: #If site is a tree
                 #Use the equivalence class to label the site
                 cluster_matrix[i][j] = equivalence_array[int(cluster_matrix[i][j]-1)]
     
@@ -157,23 +318,26 @@ def hk(site_matrix, site_matrix_rows, site_matrix_columns):
 
 def update_tree_array(matrix):
     global x, y, f, p, rows, columns, site_counter, ax, cluster_frequency_array
-    global burning_array, empty_array, normal_tree_array
+    global burning_array, empty_array, normal_tree_array, iteration
+    
     #Create variable to store updated forest
     tree_array_old = matrix 
     matrix = np.zeros((rows, columns)) 
-                
     hk_result_array = hk(tree_array_old, rows, columns)
     cluster_array = hk_result_array[0]
-    label_array = hk_result_array[1]            
-    """         
+    label_array = hk_result_array[1]  
+
+    #For testing cluster labelling     
+    """       
     for t in ax.texts:
         t.set_visible(False)
     
     for i in range(rows):
         for j in range(columns):
             text = ax.text(x=j, y=i,s= cluster_array[i][j],ha="center", va="center", color="w")  
-     
-    """
+    """ 
+    
+    #Count clusters
     unique_label_array = list(set(label_array))
     for label in unique_label_array:
         cluster_size = np.count_nonzero(cluster_array==label)
@@ -211,7 +375,7 @@ def update_tree_array(matrix):
            
     return matrix
     
-def analyse_data():
+def save_data():
     global rows, columns, normal_tree_array, cluster_frequency_array, p, f, p_initial, burning_array
     global empty_array
     tree_density = np.mean(tree_array[0:-1])/(rows*columns)
@@ -237,34 +401,7 @@ def analyse_data():
     file = open("Data/empty_array.txt", "w")
     np.savetxt(file, empty_array)
     file.close()
-    
-    #Plot graph of site evolution
-    plt.figure()
-    plt.title("Evolution of grid")
-    plt.plot(burning_array, label="Burning", color="orange")
-    plt.plot(normal_tree_array, label="Trees", color="green")
-    plt.plot(empty_array, label="Empty", color="black")
-    plt.xlabel("Time")
-    plt.ylabel("Number")
-    plt.legend()
-    plt.minorticks_on()
-    plt.grid(which="both")
-    #plt.savefig("GridEvolution.png", dpi=1200, format="png")
-    plt.show()
-    
-    #Plot histogram of cluster sizes
-    xsize = np.size(cluster_frequency_array)
-    bins_array = np.linspace(start=1, stop=xsize, num=xsize)
-    plt.figure()
-    plt.title("Cluster Size Frequency")
-    plt.hist(cluster_frequency_array, bins=bins_array)
-    #plt.xlim((0, 80)) 
-    plt.xlabel("Cluster Size")
-    plt.ylabel("Frequency")
-    plt.minorticks_on()
-    plt.grid(which="both")
-    #plt.savefig("ClusterSizeFrequency.png", dpi=1200, format="png")
-    plt.show()
+
         
 
 def animate(i):
@@ -274,6 +411,7 @@ def animate(i):
     if iteration < run_iteration:
         iteration = iteration + 1 #Increment iteration
         im.set_data(animate.X) #Updates animation
+
         animate.X = update_tree_array(animate.X) #Calculates new animation data
     else:
         print("Finished Animation. Producing plots")
@@ -287,9 +425,11 @@ if mode == "analysis":
         print(iteration)
         tree_array = update_tree_array(tree_array) #Calculates new site data
     print("Finished calculating data")
-    analyse_data()
+    save_data()
+    output_results()
 #Analyses data
 else: 
+   
     #Sets colours of animation        
     colors_list = [(0.2,0,0), (0,0.5,0), (1,0,0), 'orange']
     cmap_test = colors.ListedColormap(colors_list)
@@ -304,4 +444,10 @@ else:
     anim = animation.FuncAnimation(fig, animate, frames=run_iteration, interval=interval, repeat=False)
     plt.draw()
     plt.axis('off')
+    fig.tight_layout()
+    #figManager = plt.get_current_fig_manager()
+    #figManager.window.showMaximized()
     plt.show()
+    
+    save_data()
+    output_results()
